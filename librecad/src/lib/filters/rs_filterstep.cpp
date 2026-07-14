@@ -29,10 +29,34 @@
 #include "rs_graphic.h"
 
 #ifdef LC_HAVE_OCCT
+#include <TopAbs_ShapeEnum.hxx>
+#include <TopExp_Explorer.hxx>
+
 #include "lc_hlrprojector.h"
 #include "lc_occtentityconverter.h"
 #include "lc_stepreader.h"
 #include "lc_stepviewlayout.h"
+
+namespace {
+
+int edgeCount(const TopoDS_Shape& shape) {
+    if (shape.IsNull()) {
+        return 0;
+    }
+    int n = 0;
+    for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next()) {
+        ++n;
+    }
+    return n;
+}
+
+// Dense assemblies produce tens of thousands of hidden edges per view --
+// unreadable line spaghetti that also drags canvas performance down.
+// Standard drafting practice omits hidden lines from assembly drawings, so
+// past this budget a view's hidden geometry is skipped (with a message).
+constexpr int kMaxHiddenEdgesPerView = 5000;
+
+} // namespace
 #endif
 
 bool RS_FilterSTEP::fileImport(RS_Graphic& g, const QString& file, RS2::FormatType /*type*/) {
@@ -57,10 +81,21 @@ bool RS_FilterSTEP::fileImport(RS_Graphic& g, const QString& file, RS2::FormatTy
         LC_StepViewKind::Right, LC_StepViewKind::Iso
     };
 
+    // Constructing the projector does the expensive one-time setup (shape
+    // load, and meshing when the model is complex enough to force the fast
+    // polygonal mode -- see gitcoeder/LibreCAD#1 for why that mode exists).
+    LC_HlrProjector projector(read.shape);
+    if (projector.usesFastApproximation()) {
+        RS_DEBUG->print(RS_Debug::D_WARNING,
+            "RS_FilterSTEP::fileImport: model has %d faces (threshold %d); "
+            "using fast polygonal projection, curves become line segments",
+            projector.faceCount(), LC_HlrProjector::kFastModeFaceThreshold);
+    }
+
     std::vector<LC_StepViewEntities> views;
     int approximatedEdgeCount = 0;
     for (LC_StepViewKind kind : kAllViews) {
-        LC_HlrViewResult hlr = LC_HlrProjector::project(read.shape, kind);
+        LC_HlrViewResult hlr = projector.project(kind);
 
         LC_StepViewEntities view;
         view.kind = kind;
@@ -73,8 +108,17 @@ bool RS_FilterSTEP::fileImport(RS_Graphic& g, const QString& file, RS2::FormatTy
 
         appendConverted(hlr.visibleSharp, view.visible);
         appendConverted(hlr.visibleOutline, view.visible);
-        appendConverted(hlr.hiddenSharp, view.hidden);
-        appendConverted(hlr.hiddenOutline, view.hidden);
+
+        const int hiddenEdges = edgeCount(hlr.hiddenSharp) + edgeCount(hlr.hiddenOutline);
+        if (hiddenEdges > kMaxHiddenEdgesPerView) {
+            RS_DEBUG->print(RS_Debug::D_WARNING,
+                "RS_FilterSTEP::fileImport: view %d has %d hidden edges "
+                "(limit %d); hidden lines omitted for this view",
+                static_cast<int>(kind), hiddenEdges, kMaxHiddenEdgesPerView);
+        } else {
+            appendConverted(hlr.hiddenSharp, view.hidden);
+            appendConverted(hlr.hiddenOutline, view.hidden);
+        }
 
         views.push_back(std::move(view));
     }

@@ -56,16 +56,42 @@ struct LC_HlrViewResult {
 };
 
 /**
- * Wraps OCCT's exact (non-polygonal) hidden-line-removal algorithm
- * (HLRBRep_Algo / HLRBRep_HLRToShape) to compute a 2D orthographic or
- * isometric projection of a 3D shape, keeping edges as exact curves
- * (lines/circles/ellipses/...) rather than polygonal segment approximations
- * -- required so the entity converter can emit native RS_Line/RS_Arc/
- * RS_Circle entities instead of dense polylines.
+ * Computes 2D orthographic/isometric projections of a 3D shape with hidden
+ * line removal. Two modes, selected automatically by model complexity:
+ *
+ * - Exact (HLRBRep_Algo): projected edges stay typed as analytic curves
+ *   (lines/circles/ellipses), so the entity converter can emit native
+ *   RS_Circle/RS_Arc entities. Accurate but slow -- runtime grows badly
+ *   with face count and made complex assemblies hang for minutes
+ *   (gitcoeder/LibreCAD#1).
+ *
+ * - Fast polygonal (HLRBRep_PolyAlgo over a triangulated mesh): all output
+ *   is straight-segment chains, so curves become polylines, but a
+ *   2000+-face assembly projects in well under a second per view.
+ *
+ * Construct once per import; the expensive setup (shape load / meshing)
+ * happens in the constructor and is shared by all four project() calls.
  */
 class LC_HlrProjector {
 public:
-    static LC_HlrViewResult project(const TopoDS_Shape& shape, LC_StepViewKind view);
+    explicit LC_HlrProjector(const TopoDS_Shape& shape);
+    ~LC_HlrProjector();
+
+    LC_HlrViewResult project(LC_StepViewKind view);
+
+    //! True when model complexity forced the fast polygonal mode, meaning
+    //! all curved edges in the result are straight-segment approximations.
+    bool usesFastApproximation() const { return m_fastMode; }
+
+    int faceCount() const { return m_faceCount; }
+
+    //! Face count at or above which the fast polygonal algorithm is used.
+    static constexpr int kFastModeFaceThreshold = 400;
+
+private:
+    TopoDS_Shape m_shape;
+    int m_faceCount = 0;
+    bool m_fastMode = false;
 };
 
 #endif // LC_HAVE_OCCT
