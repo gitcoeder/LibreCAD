@@ -104,6 +104,8 @@ RS2::FormatType QG_FileDialog::getType(const QString& filter) const
         return  RS2::FormatJWW;
     } else if (filter == fDxf1) {
         return  RS2::FormatDXF1;
+    } else if (filter == fStep) {
+        return  RS2::FormatSTEP;
     }
     return RS2::FormatDXFRW;
 }
@@ -137,6 +139,7 @@ QG_FileDialog::QG_FileDialog(QWidget* parent, Qt::WindowFlags f, FileType type)
     fCxf = tr("QCad Font %1").arg("(*.cxf)");
     fJww = tr("Jww Drawing %1").arg("(*.jww)");
     fDxf1 = tr("QCad 1.x file %1").arg("(*.dxf)");
+    fStep = tr("STEP 3D File %1").arg("(*.step *.stp)");
     switch(type){
     case BlockFile:
         name=tr("Block", "block file");
@@ -159,9 +162,9 @@ QString QG_FileDialog::getOpenFile(RS2::FormatType* type){
     QString fn = "";
     QStringList filters;
 #ifdef DWGSUPPORT
-    filters << fDxfrw  << fDxf1 << fDwg << fLff << fCxf << fJww;
+    filters << fDxfrw  << fDxf1 << fDwg << fLff << fCxf << fJww << fStep;
 #else
-    filters << fDxfrw  << fDxf1 << fLff << fCxf << fJww;
+    filters << fDxfrw  << fDxf1 << fLff << fCxf << fJww << fStep;
 #endif
 
     setWindowTitle(tr("Open %1").arg(name));
@@ -462,6 +465,7 @@ QString QG_FileDialog::getOpenFileName(QWidget* parent, RS2::FormatType* type) {
     QString fLff(QObject::tr("LFF Font %1").arg("(*.lff)"));
     QString fCxf(QObject::tr("Font %1").arg("(*.cxf)"));
     QString fJww(QObject::tr("Jww %1").arg("(*.jww)"));
+    QString fStep(QObject::tr("STEP 3D File %1").arg("(*.step *.stp)"));
 
     RS_DEBUG->print("fDxfrw: %s", fDxfrw.toLatin1().data());
     RS_DEBUG->print("fDxf1: %s", fDxf1.toLatin1().data());
@@ -482,6 +486,7 @@ QString QG_FileDialog::getOpenFileName(QWidget* parent, RS2::FormatType* type) {
     filters.append(fLff);
     filters.append(fCxf);
     filters.append(fJww);
+    filters.append(fStep);
 
     fileDlg->setNameFilters(filters);
     fileDlg->setFileMode(QFileDialog::ExistingFile);
@@ -516,6 +521,8 @@ QString QG_FileDialog::getOpenFileName(QWidget* parent, RS2::FormatType* type) {
                 *type = RS2::FormatCXF;
             } else if (fileDlg->selectedNameFilter()==fJww) {
                 *type = RS2::FormatJWW;
+            } else if (fileDlg->selectedNameFilter()==fStep) {
+                *type = RS2::FormatSTEP;
             }
         }
         cancel = false;

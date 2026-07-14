@@ -99,6 +99,21 @@ set(Boost_INCLUDE_DIRS "${Boost_INCLUDE_DIR}")
 
 find_package(Freetype)
 
+option(LC_ENABLE_STEP_IMPORT "Enable STEP 3D import via OpenCASCADE" ON)
+
+set(LC_HAVE_OCCT FALSE)
+if(LC_ENABLE_STEP_IMPORT)
+    find_package(OpenCASCADE QUIET)
+    if(OpenCASCADE_FOUND)
+        set(LC_HAVE_OCCT TRUE)
+        message(STATUS "OpenCASCADE ${OpenCASCADE_MAJOR_VERSION}.${OpenCASCADE_MINOR_VERSION}.${OpenCASCADE_MAINTENANCE_VERSION} found -- STEP import enabled")
+    else()
+        message(STATUS "OpenCASCADE not found -- STEP import disabled "
+                        "(set LC_ENABLE_STEP_IMPORT=OFF to silence, or install "
+                        "the 'occt' package / point CMAKE_PREFIX_PATH at an OCCT install)")
+    endif()
+endif()
+
 # Define all sources (as before)
 file(GLOB_RECURSE AUTO_EXCLUDED_SOURCES
     "${PROJECT_SOURCE_DIR}/librecad/src/lib/debug/*.*"
@@ -209,6 +224,7 @@ set(SHARED_INCLUDES
     librecad/src/lib/engine/utils
     librecad/src/lib/fileio
     librecad/src/lib/filters
+    librecad/src/lib/step
     librecad/src/lib/generators
     librecad/src/lib/generators/image
     librecad/src/lib/generators/layers
@@ -1001,6 +1017,16 @@ set(SHARED_SOURCES
     librecad/src/lib/filters/rs_filterjww.h
     librecad/src/lib/filters/rs_filterlff.cpp
     librecad/src/lib/filters/rs_filterlff.h
+    librecad/src/lib/filters/rs_filterstep.cpp
+    librecad/src/lib/filters/rs_filterstep.h
+    librecad/src/lib/step/lc_stepreader.cpp
+    librecad/src/lib/step/lc_stepreader.h
+    librecad/src/lib/step/lc_hlrprojector.cpp
+    librecad/src/lib/step/lc_hlrprojector.h
+    librecad/src/lib/step/lc_occtentityconverter.cpp
+    librecad/src/lib/step/lc_occtentityconverter.h
+    librecad/src/lib/step/lc_stepviewlayout.cpp
+    librecad/src/lib/step/lc_stepviewlayout.h
     librecad/src/lib/generators/image/lc_imageexporter.cpp
     librecad/src/lib/generators/image/lc_imageexporter.h
     librecad/src/lib/generators/layers/lc_layersexporter.cpp
@@ -1619,6 +1645,23 @@ target_link_libraries(librecad_lib PRIVATE
     Qt6::Core Qt6::Widgets Qt6::Gui Qt6::PrintSupport Qt6::Svg Qt6::Network
 )
 set_property(TARGET librecad_lib PROPERTY AUTOUIC_OPTIONS --connections string)
+
+if(LC_HAVE_OCCT)
+    target_compile_definitions(librecad_lib PRIVATE LC_HAVE_OCCT)
+    target_include_directories(librecad_lib PRIVATE ${OpenCASCADE_INCLUDE_DIR})
+    target_link_directories(librecad_lib PRIVATE ${OpenCASCADE_LIBRARY_DIR})
+    # OCCT 7.8+ renamed the STEP translator toolkit to TKDESTEP (was
+    # TKSTEP/TKSTEPBase/TKSTEPAttr in older releases); confirmed against
+    # the actual installed conda-forge occt 7.9 package (.pixi/envs/default/
+    # Library/lib/cmake/opencascade/OpenCASCADEConfig.cmake), which exports
+    # a plain OpenCASCADE_LIBRARIES variable rather than IMPORTED targets.
+    target_link_libraries(librecad_lib PRIVATE
+        TKDESTEP TKXSBase
+        TKHLR
+        TKTopAlgo TKGeomAlgo TKBO TKShHealing
+        TKBRep TKGeomBase TKG3d TKG2d TKMath TKernel
+    )
+endif()
 
 if(WIN32)
     target_compile_definitions(librecad_lib PRIVATE _USE_MATH_DEFINES)

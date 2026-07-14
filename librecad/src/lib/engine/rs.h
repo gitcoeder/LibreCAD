@@ -122,7 +122,8 @@ namespace RS2 {
         FormatLFF,           /**< LibreCAD Font File format. */
         FormatCXF,           /**< CAM Expert Font format. */
         FormatJWW,           /**< JWW Format type */
-        FormatJWC            /**< JWC Format type */
+        FormatJWC,           /**< JWC Format type */
+        FormatSTEP           /**< STEP (ISO-10303) 3D format, imported as generated 2D views. */
     };
 
     /*
